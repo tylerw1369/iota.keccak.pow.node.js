@@ -1,0 +1,28 @@
+{
+    "name": "iota.keccak.pow.node.js",
+    "version": "0.0.1",
+    "description": "A simple IOTA PoW node using the iota.keccak.js implementation",
+    "main": "./main.js",
+    "keywords": [
+        "iota",
+        "tangle",
+        "pow",
+        "node"
+    ],
+    "author": {
+        "name": "SteppoFF"
+    },
+    "license": "MIT",
+    "dependencies": {
+        "body-parser": "^1.18.3",
+        "express": "^4.16.3",
+        "iota.keccak.js": "git://github.com/SteppoFF/iota.keccak.js/#master"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/SteppoFF/iota.keccak.pow.node.js"
+    },
+    "bugs": {
+        "url": "https://github.com/SteppoFF/iota.keccak.pow.node.js/issues"
+    }
+}
