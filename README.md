@@ -26,7 +26,7 @@ make BUILD_GPU=0 BUILD_JNI=0 BUILD_AVX=1 BUILD_COMPAT=1 check
 ### Usage:
 Just start the app and a PoW node will be spawned using port 19000 - modify the main.js to change the port.
 
-Use a service or screen to get it in running as a background application.
+Use a service or screen to get it running as a background application.
 
 <pre><code>node main</code></pre>
 
