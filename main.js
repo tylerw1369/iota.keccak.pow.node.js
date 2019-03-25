@@ -13,6 +13,7 @@ function masterProcess(){
         coreCount=(require('os').cpus().length);
     const config={
         port:19000,
+        ip:"0.0.0.0",
         maxMwM:14,
     };
     var counters={totalrequests:0,failedrequests:0, averagetime:0};
@@ -24,12 +25,10 @@ function masterProcess(){
       workers.push({handle:worker,jobs:0});
       // Listen for messages from worker
       worker.on('message', function(message) {
-            //worker.process.pid
-            // check if worker found better result
             if(message.success){
                 counters.totalrequests += message.trytes.length;
                 counters.averagetime = Math.floor(((counters.totalrequests - message.trytes.length) * counters.averagetime + (message.duration)) / counters.totalrequests); 
-                jobs[message.job].res.send({trytes : message.trytes});
+                jobs[message.job].res.send({trytes : message.trytes,"duration":(Date.now()-message.starttime)});
                 jobs[message.job]=false;
                 workers[message.worker].jobs--;
             } else {
@@ -37,7 +36,8 @@ function masterProcess(){
                 counters.failedrequests++;
                 console.log(getPrintableTime()+" - Error performing PoW");
                 console.log(message.result);
-                jobs[message.job].res.send({trytes : false});
+                res.status(500);
+                jobs[message.job].res.send({trytes : false,"duration":(Date.now()-message.starttime)});
                 jobs[message.job]=false;
                 workers[message.worker].jobs--;
             }
@@ -55,65 +55,76 @@ function masterProcess(){
       });
     }
     console.log(getPrintableTime()+" - "+workers.length+" Workers started");
-// spawn server
+    // spawn server
     const server = express();
     server.disable('x-powered-by');
     server.set('etag', false);
     server.use(bodyParser.json());
     server.use(function(req, res){
+        var starttime=Date.now();
         res.header("Access-Control-Allow-Origin", "*")
         res.header("Access-Control-Allow-Methods", "POST")
         if(req.body.command=="getNodeInfo"){
             res.send({
               appName: "iota.keccak.pow.node.js",
               appVersion: "0.0.1",
-              duration: 1
+              duration: (Date.now()-starttime)
             })
         } else if(req.body.command=="attachToTangle"){
             let fields = req.body;
-            fields.minWeightMagnitude=parseInt(fields.minWeightMagnitude);
-            if(fields.minWeightMagnitude > config.maxMwM || fields.minWeightMagnitude < 1){
-                res.send({error: "MwM of " + fields.minWeightMagnitude + " is invalid or over max of " + config.maxMwM});
-            } else if(!fields.trunkTransaction.match(/^[A-Z9]{81}$/)){
-                res.send({error: "Invalid trunk transaction"});
-            } else if(!fields.branchTransaction.match(/^[A-Z9]{81}$/)){
-                res.send({error: "Invalid branch transaction"});
-            } else if(!checkTrytes(fields.trytes)){
-                res.send({error: "Invalid trytes provided"});
+            if (typeof(fields.minWeightMagnitude)==="undefined"){
+                res.status(400);
+                res.send({error: "Invalid parameters","duration":(Date.now()-starttime)});
             } else {
-                var target=0;
-                var jobcount=10000;
-                for (var i = 0; i < workers.length; ++i) {
-                    if(workers[i].jobs<jobcount){
-                        target=i;
-                        jobcount=workers[i].jobs;
-                        if(workers[i].jobs==0){
-                          i=workers.length;  
-                        }
-                    };
+                fields.minWeightMagnitude=parseInt(fields.minWeightMagnitude);
+                if(fields.minWeightMagnitude > config.maxMwM || fields.minWeightMagnitude < 1){
+                    res.status(400);
+                    res.send({error: "MwM of " + fields.minWeightMagnitude + " is invalid or over max of " + config.maxMwM,"duration":(Date.now()-starttime)});
+                } else if(!fields.trunkTransaction.match(/^[A-Z9]{81}$/)){
+                    res.status(400);
+                    res.send({error: "Invalid trunk transaction","duration":(Date.now()-starttime)});
+                } else if(!fields.branchTransaction.match(/^[A-Z9]{81}$/)){
+                    res.status(400);
+                    res.send({error: "Invalid branch transaction","duration":(Date.now()-starttime)});
+                } else if(!checkTrytes(fields.trytes)){
+                    res.status(400);
+                    res.send({error: "Invalid trytes provided","duration":(Date.now()-starttime)});
+                } else {
+                    var target=0;
+                    var jobcount=10000;
+                    for (var i = 0; i < workers.length; ++i) {
+                        if(workers[i].jobs<jobcount){
+                            target=i;
+                            jobcount=workers[i].jobs;
+                            if(workers[i].jobs==0){
+                              i=workers.length;  
+                            }
+                        };
+                    }
+                    if(jobcount>10){
+                        console.log("Jobcount critical!");
+                    }
+                    let curjob=jobs.length;
+                    jobs[curjob]={req:req,res:res};
+                    workers[target].jobs++;
+                    workers[target].handle.send({fields:fields,job:curjob,worker:target,starttime:starttime});                     
                 }
-                if(jobcount>10){
-                    console.log("Jobcount critical!");
-                }
-                let curjob=jobs.length;
-                jobs[curjob]={req:req,res:res};
-                workers[target].jobs++;
-                workers[target].handle.send({fields:fields,job:curjob,worker:target});                     
             }
         } else if(req.body.command=="getNeighbors"){
-            res.send({neighbors: []})
+            res.send({neighbors: [],"duration":(Date.now()-starttime)})
         } else if(req.body.command=="powInfo"){
-            res.send({total: counters.totalrequests,failed: counters.failedrequests, averagetime: counters.averagetime + 'ms'})
+            res.send({total: counters.totalrequests,failed: counters.failedrequests, averagetime: counters.averagetime + 'ms',"duration":(Date.now()-starttime)})
         } else {
-            res.send({error: "Unknown command!"});
+            res.status(400);
+            res.send({error: "Unknown command!","duration":(Date.now()-starttime)});
         }
     });
     http.createServer(server)
     .on('connection', function(socket) {
         socket.setTimeout(60000);
     })
-    .listen(config.port, '0.0.0.0', () => {
-        console.log(getPrintableTime()+" - Listening on port "+config.port);
+    .listen(config.port, config.ip, () => {
+        console.log(getPrintableTime()+" - Bound to "+config.ip+" and listening on and port "+config.port);
     });
 }
 
@@ -126,9 +137,9 @@ function childProcess() {
     iotakeccak.doPoW(message.fields.trytes,message.fields.trunkTransaction,message.fields.branchTransaction,message.fields.minWeightMagnitude).
     then(function(result){
         if(!result.success){
-            process.send({task:"pow",job:message.job,worker:message.worker,success:false,result:result,id: process.pid});
+            process.send({task:"pow",job:message.job,worker:message.worker,success:false,starttime:message.starttime,result:result,id: process.pid});
         } else {
-            process.send({task:"pow",job:message.job,worker:message.worker,success:true,trytes:result.trytes, duration:(Date.now() - startTime),id: process.pid});
+            process.send({task:"pow",job:message.job,worker:message.worker,success:true, starttime:message.starttime,trytes:result.trytes, duration:(Date.now() - startTime),id: process.pid});
         }
     });
   });
