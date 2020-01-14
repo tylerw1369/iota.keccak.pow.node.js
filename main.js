@@ -28,7 +28,7 @@ function masterProcess(){
             if(message.success){
                 counters.totalrequests += message.trytes.length;
                 counters.averagetime = Math.floor(((counters.totalrequests - message.trytes.length) * counters.averagetime + (message.duration)) / counters.totalrequests); 
-                jobs[message.job].res.send({trytes : message.trytes,"duration":(Date.now()-message.starttime)});
+                jobs[message.job].res.send({trytes : message.trytes.reverse(),"duration":(Date.now()-message.starttime)});
                 jobs[message.job]=false;
                 workers[message.worker].jobs--;
             } else {
